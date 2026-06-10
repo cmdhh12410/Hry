@@ -48,6 +48,22 @@
 		button:hover { border-color: var(--brand); }
 		button:disabled { opacity: .55; cursor: not-allowed; }
 
+		.button-like {
+			border: 1px solid var(--line);
+			border-radius: 6px;
+			background: var(--panel);
+			color: var(--text);
+			padding: 9px 13px;
+			cursor: pointer;
+			font-weight: 400;
+			font-size: inherit;
+			line-height: normal;
+			display: inline-flex;
+			align-items: center;
+		}
+
+		.button-like:hover { border-color: var(--brand); }
+
 		.primary {
 			background: var(--brand);
 			border-color: var(--brand);
@@ -335,6 +351,78 @@
 			word-break: break-all;
 		}
 
+		.gallery-manager {
+			display: grid;
+			gap: 12px;
+		}
+
+		.gallery-album {
+			border: 1px solid var(--line);
+			border-radius: 8px;
+			background: var(--soft-2);
+			overflow: hidden;
+		}
+
+		.gallery-album-head {
+			display: flex;
+			justify-content: space-between;
+			gap: 12px;
+			align-items: flex-start;
+			padding: 12px;
+			background: var(--soft);
+			border-bottom: 1px solid var(--line);
+		}
+
+		.gallery-actions {
+			display: flex;
+			gap: 8px;
+			flex-wrap: wrap;
+			justify-content: flex-end;
+		}
+
+		.gallery-grid {
+			display: grid;
+			grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+			gap: 10px;
+			padding: 12px;
+		}
+
+		.gallery-photo {
+			border: 1px solid var(--line);
+			border-radius: 8px;
+			background: #fff;
+			overflow: hidden;
+			min-width: 0;
+		}
+
+		.gallery-photo img {
+			width: 100%;
+			height: 104px;
+			object-fit: contain;
+			display: block;
+			background: var(--soft);
+		}
+
+		.gallery-photo label {
+			display: flex;
+			gap: 6px;
+			align-items: center;
+			padding: 7px;
+			font-size: 12px;
+			font-weight: 500;
+			word-break: break-all;
+		}
+
+		.gallery-remote {
+			padding: 12px;
+			border-top: 1px solid var(--line);
+			background: #fff;
+		}
+
+		.gallery-remote textarea {
+			min-height: 88px;
+		}
+
 		.check {
 			display: flex;
 			align-items: center;
@@ -581,6 +669,7 @@
 	<script>
 		const CONFIG_DIR = ["src", "config"];
 		const POSTS_DIR = ["src", "content", "posts"];
+		const SPEC_DIR = ["src", "content", "spec"];
 		const BACKUP_DIR = [".firefly-config-manager-backups"];
 		const CONFIG_FILES = [
 			"siteConfig.ts", "profileConfig.ts", "sidebarConfig.ts", "announcementConfig.ts",
@@ -595,11 +684,15 @@
 			root: null,
 			configDir: null,
 			postsDir: null,
+			specDir: null,
 			backupDir: null,
 			assetUrls: new Map(),
 			files: new Map(),
+			specFiles: new Map(),
 			posts: [],
 			dirtyFiles: new Set(),
+			dirtyNestedFiles: new Map(),
+			dirtySpec: new Set(),
 			dirtyPosts: new Set(),
 			changeNotes: new Map(),
 			nextBackupName: "",
@@ -608,6 +701,8 @@
 			activePostPath: "",
 			postQuery: "",
 			backupSessions: [],
+			galleryFiles: new Map(),
+			galleryRemoteUrls: new Map(),
 		};
 
 		const els = {
@@ -772,6 +867,9 @@
 					f("Bangumi 页面", "siteConfig.ts", "siteConfig", "pages.bangumi", "boolean"),
 					f("画廊页面", "siteConfig.ts", "siteConfig", "pages.gallery", "boolean"),
 					f("Bangumi 用户 ID", "siteConfig.ts", "siteConfig", "bangumi.userId"),
+					f("Bangumi 数据模式", "siteConfig.ts", "siteConfig", "bangumi.mode", "segmented", { options: ["static", "dynamic"] }),
+					f("Bangumi API 地址", "siteConfig.ts", "siteConfig", "bangumi.apiUrl", "url"),
+					f("Bangumi 详情页地址", "siteConfig.ts", "siteConfig", "bangumi.subjectBaseUrl", "url"),
 					f("Bangumi 分类顺序", "siteConfig.ts", "siteConfig", "bangumi.categoryOrder", "lines"),
 					f("侧边栏启用", "sidebarConfig.ts", "sidebarLayoutConfig", "enable", "boolean"),
 					f("侧边栏位置", "sidebarConfig.ts", "sidebarLayoutConfig", "position", "segmented", { options: ["left", "right", "both"] }),
@@ -842,6 +940,7 @@
 						],
 						empty: { title: "新友链", imgurl: "", desc: "", siteurl: "https://", tags: [], weight: 0, enabled: true },
 					}),
+					f("友链申请示例", "friends.mdx", "friendsMdx", "", "friendsMdx", { hint: "这些内容来自 src/content/spec/friends.mdx，会影响友链页下方“申请友链”的本站信息、申请邮箱和注意事项。" }),
 					f("画廊列宽", "galleryConfig.ts", "galleryConfig", "columnWidth", "number"),
 					f("画廊相册", "galleryConfig.ts", "galleryConfig", "albums", "arrayObject", {
 						schema: [
@@ -852,9 +951,12 @@
 							["location", "地点", "text"],
 							["tags", "标签", "lines"],
 							["cover", "封面", "text"],
+							["password", "访问密码", "text"],
+							["passwordHint", "密码提示", "text"],
 						],
 						empty: { id: "new-album", name: "新相册", tags: [] },
 					}),
+					f("画廊图片管理", "galleryConfig.ts", "galleryConfig", "albums", "galleryImages", { hint: "本地图片位于 public/gallery/{相册 ID}/，外链图片写入同目录 urls.txt。上传、删除和外链列表会立即写入文件夹；设为封面会修改相册 cover 字段，需要再点击保存配置。" }),
 					f("赞助页标题", "sponsorConfig.ts", "sponsorConfig", "title"),
 					f("赞助页描述", "sponsorConfig.ts", "sponsorConfig", "description", "textarea"),
 					f("赞助说明", "sponsorConfig.ts", "sponsorConfig", "usage", "textarea"),
@@ -875,10 +977,11 @@
 					f("赞助者列表", "sponsorConfig.ts", "sponsorConfig", "sponsors", "arrayObject", {
 						schema: [
 							["name", "名称", "text"],
+							["avatar", "头像", "text"],
 							["amount", "金额/说明", "text"],
 							["date", "日期", "text"],
 						],
-						empty: { name: "赞助者", amount: "", date: new Date().toISOString().slice(0, 10) },
+						empty: { name: "赞助者", avatar: "", amount: "", date: new Date().toISOString().slice(0, 10) },
 					}),
 					f("广告 1 标题", "adConfig.ts", "adConfig1", "title"),
 					f("广告 1 内容", "adConfig.ts", "adConfig1", "content", "textarea"),
@@ -1020,18 +1123,50 @@
 					f("Spine 移动端断点", "pioConfig.ts", "spineModelConfig", "responsive.mobileBreakpoint", "number"),
 					f("Spine z-index", "pioConfig.ts", "spineModelConfig", "zIndex", "number"),
 					f("Spine 透明度", "pioConfig.ts", "spineModelConfig", "opacity", "range", { min: 0, max: 1, step: 0.01 }),
-					f("Live2D 启用", "pioConfig.ts", "live2dModelConfig", "enable", "boolean"),
-					f("Live2D 模型路径", "pioConfig.ts", "live2dModelConfig", "model.path"),
-					f("Live2D 位置", "pioConfig.ts", "live2dModelConfig", "position.corner", "select", { options: ["bottom-left", "bottom-right", "top-left", "top-right"] }),
-					f("Live2D offsetX", "pioConfig.ts", "live2dModelConfig", "position.offsetX", "number"),
-					f("Live2D offsetY", "pioConfig.ts", "live2dModelConfig", "position.offsetY", "number"),
-					f("Live2D 宽度", "pioConfig.ts", "live2dModelConfig", "size.width", "number"),
-					f("Live2D 高度", "pioConfig.ts", "live2dModelConfig", "size.height", "number"),
-					f("Live2D 交互", "pioConfig.ts", "live2dModelConfig", "interactive.enabled", "boolean"),
-					f("Live2D 点击消息", "pioConfig.ts", "live2dModelConfig", "interactive.clickMessages", "lines"),
-					f("Live2D 消息显示时间", "pioConfig.ts", "live2dModelConfig", "interactive.messageDisplayTime", "number"),
-					f("Live2D 移动端隐藏", "pioConfig.ts", "live2dModelConfig", "responsive.hideOnMobile", "boolean"),
-					f("Live2D 移动端断点", "pioConfig.ts", "live2dModelConfig", "responsive.mobileBreakpoint", "number"),
+					f("Live2D 启用", "pioConfig.ts", "live2dWidgetConfig", "enable", "boolean"),
+					f("Live2D 模型配置", "pioConfig.ts", "live2dWidgetConfig", "model", "json", { hint: "新版使用 l2d-widget，model 可为单个对象或数组；常用字段：path、volume、scale、x、y。" }),
+					f("Live2D 单模型路径", "pioConfig.ts", "live2dWidgetConfig", "model.path"),
+					f("Live2D 音量", "pioConfig.ts", "live2dWidgetConfig", "model.volume", "range", { min: 0, max: 1, step: 0.01 }),
+					f("Live2D 缩放", "pioConfig.ts", "live2dWidgetConfig", "model.scale", "number"),
+					f("Live2D X 偏移", "pioConfig.ts", "live2dWidgetConfig", "model.x", "number"),
+					f("Live2D Y 偏移", "pioConfig.ts", "live2dWidgetConfig", "model.y", "number"),
+					f("Live2D 位置", "pioConfig.ts", "live2dWidgetConfig", "position", "select", { options: ["bottom-left", "bottom-right"] }),
+					f("Live2D 尺寸", "pioConfig.ts", "live2dWidgetConfig", "size", "json", { hint: "可写数字，也可写 { width, height }。" }),
+					f("Live2D 宽度", "pioConfig.ts", "live2dWidgetConfig", "size.width", "number"),
+					f("Live2D 高度", "pioConfig.ts", "live2dWidgetConfig", "size.height", "number"),
+					f("Live2D UI 主题色", "pioConfig.ts", "live2dWidgetConfig", "primaryColor"),
+					f("Live2D 动画时长", "pioConfig.ts", "live2dWidgetConfig", "transitionDuration", "number"),
+					f("Live2D 动画类型", "pioConfig.ts", "live2dWidgetConfig", "transitionType", "select", { options: ["slide", "fade"] }),
+					f("Live2D 菜单项", "pioConfig.ts", "live2dWidgetConfig", "menus.items", "arrayObject", {
+						schema: [
+							["icon", "图标", "text"],
+							["label", "文字", "text"],
+							["action", "动作", "text"],
+						],
+						empty: { icon: "mdi:home", label: "返回主页", action: "home" },
+					}),
+					f("Live2D 额外菜单项", "pioConfig.ts", "live2dWidgetConfig", "menus.extraItems", "arrayObject", {
+						schema: [
+							["icon", "图标", "text"],
+							["label", "文字", "text"],
+							["action", "动作", "text"],
+						],
+						empty: { icon: "mdi:github", label: "GitHub", action: "github" },
+					}),
+					f("Live2D 菜单对齐", "pioConfig.ts", "live2dWidgetConfig", "menus.align", "select", { options: ["left", "right"] }),
+					f("Live2D 气泡启用", "pioConfig.ts", "live2dWidgetConfig", "tips.enable", "boolean"),
+					f("Live2D 欢迎消息", "pioConfig.ts", "live2dWidgetConfig", "tips.welcomeMessage", "lines"),
+					f("Live2D 循环提示", "pioConfig.ts", "live2dWidgetConfig", "tips.messages", "lines"),
+					f("Live2D 气泡显示时长", "pioConfig.ts", "live2dWidgetConfig", "tips.duration", "number"),
+					f("Live2D 气泡间隔", "pioConfig.ts", "live2dWidgetConfig", "tips.interval", "number"),
+					f("Live2D 气泡 X 偏移", "pioConfig.ts", "live2dWidgetConfig", "tips.offset.x", "number"),
+					f("Live2D 气泡 Y 偏移", "pioConfig.ts", "live2dWidgetConfig", "tips.offset.y", "number"),
+					f("Live2D 打字嘴型参数", "pioConfig.ts", "live2dWidgetConfig", "tips.typing.param"),
+					f("Live2D 打字速度", "pioConfig.ts", "live2dWidgetConfig", "tips.typing.speed", "number"),
+					f("Live2D 嘴型最小值", "pioConfig.ts", "live2dWidgetConfig", "tips.typing.minValue", "range", { min: 0, max: 1, step: 0.01 }),
+					f("Live2D 嘴型最大值", "pioConfig.ts", "live2dWidgetConfig", "tips.typing.maxValue", "range", { min: 0, max: 1, step: 0.01 }),
+					f("Live2D 移动端隐藏", "pioConfig.ts", "live2dWidgetConfig", "responsive.hideOnMobile", "boolean"),
+					f("Live2D 移动端断点", "pioConfig.ts", "live2dWidgetConfig", "responsive.mobileBreakpoint", "number"),
 					f("代码块主题深色", "expressiveCodeConfig.ts", "expressiveCodeConfig", "darkTheme"),
 					f("代码块主题浅色", "expressiveCodeConfig.ts", "expressiveCodeConfig", "lightTheme"),
 					f("代码块可折叠", "expressiveCodeConfig.ts", "expressiveCodeConfig", "pluginCollapsible.enable", "boolean"),
@@ -1053,13 +1188,14 @@
 					f("Microsoft Clarity ID", "siteConfig.ts", "siteConfig", "analytics.microsoftClarityId"),
 					f("Umami Website ID", "siteConfig.ts", "siteConfig", "analytics.umamiAnalytics.websiteId"),
 					f("Umami Script URL", "siteConfig.ts", "siteConfig", "analytics.umamiAnalytics.scriptUrl", "url"),
+					f("Umami 回放脚本 URL", "siteConfig.ts", "siteConfig", "analytics.umamiAnalytics.replaysScriptUrl", "url"),
 					f("Umami 追踪外链", "siteConfig.ts", "siteConfig", "analytics.umamiAnalytics.trackOutboundLinks", "boolean"),
 					f("Umami Web Vitals", "siteConfig.ts", "siteConfig", "analytics.umamiAnalytics.collectWebVitals", "boolean"),
-					f("Relpays 启用", "siteConfig.ts", "siteConfig", "analytics.umamiAnalytics.relpays.enabled", "boolean"),
-					f("Relpays 采样率", "siteConfig.ts", "siteConfig", "analytics.umamiAnalytics.relpays.sampleRate", "range", { min: 0, max: 1, step: 0.01 }),
-					f("Relpays 遮罩等级", "siteConfig.ts", "siteConfig", "analytics.umamiAnalytics.relpays.maskLevel", "segmented", { options: ["moderate", "strict"] }),
-					f("Relpays 最大时长", "siteConfig.ts", "siteConfig", "analytics.umamiAnalytics.relpays.maxDuration", "number"),
-					f("Relpays 屏蔽选择器", "siteConfig.ts", "siteConfig", "analytics.umamiAnalytics.relpays.blockSelector"),
+					f("Replays 启用", "siteConfig.ts", "siteConfig", "analytics.umamiAnalytics.replays.enabled", "boolean"),
+					f("Replays 采样率", "siteConfig.ts", "siteConfig", "analytics.umamiAnalytics.replays.sampleRate", "range", { min: 0, max: 1, step: 0.01 }),
+					f("Replays 遮罩等级", "siteConfig.ts", "siteConfig", "analytics.umamiAnalytics.replays.maskLevel", "segmented", { options: ["moderate", "strict"] }),
+					f("Replays 最大时长", "siteConfig.ts", "siteConfig", "analytics.umamiAnalytics.replays.maxDuration", "number"),
+					f("Replays 屏蔽选择器", "siteConfig.ts", "siteConfig", "analytics.umamiAnalytics.replays.blockSelector"),
 					f("51la ID", "siteConfig.ts", "siteConfig", "analytics.la51Analytics.Id"),
 					f("51la SDK URL", "siteConfig.ts", "siteConfig", "analytics.la51Analytics.sdkUrl"),
 					f("51la CK", "siteConfig.ts", "siteConfig", "analytics.la51Analytics.ck"),
@@ -1098,6 +1234,13 @@
 			const handle = await dir.getFileHandle(name, { create: true });
 			const writable = await handle.createWritable();
 			await writable.write(text);
+			await writable.close();
+		}
+
+		async function writeBinaryFile(dir, name, blob) {
+			const handle = await dir.getFileHandle(name, { create: true });
+			const writable = await handle.createWritable();
+			await writable.write(blob);
 			await writable.close();
 		}
 
@@ -1152,6 +1295,7 @@
 				const pkg = await root.getFileHandle("package.json").catch(() => null);
 				const configDir = await getDir(root, CONFIG_DIR).catch(() => null);
 				const postsDir = await getDir(root, POSTS_DIR).catch(() => null);
+				const specDir = await getDir(root, SPEC_DIR).catch(() => null);
 				if (!pkg || !configDir) {
 					setStatus("所选目录不是 Firefly/Astro 项目：未找到 package.json 或 src/config。", "error");
 					return;
@@ -1159,6 +1303,7 @@
 				state.root = root;
 				state.configDir = configDir;
 				state.postsDir = postsDir;
+				state.specDir = specDir;
 				state.backupDir = await getDir(root, BACKUP_DIR, true);
 				els.repoName.textContent = root.name;
 				els.repoMeta.textContent = postsDir ? "已授权配置和文章读写。" : "已授权配置读写，但未找到 src/content/posts。";
@@ -1178,9 +1323,13 @@
 		async function reloadAll() {
 			for (const url of state.assetUrls.values()) URL.revokeObjectURL(url);
 			state.assetUrls.clear();
+			clearGalleryCache();
 			state.files.clear();
+			state.specFiles.clear();
 			state.posts = [];
 			state.dirtyFiles.clear();
+			state.dirtyNestedFiles.clear();
+			state.dirtySpec.clear();
 			state.dirtyPosts.clear();
 			state.changeNotes.clear();
 			for (const file of CONFIG_FILES) {
@@ -1196,6 +1345,9 @@
 					state.posts.push(parsePost(item.path, text));
 				}
 				if (!state.activePostPath && state.posts[0]) state.activePostPath = state.posts[0].path;
+			}
+			if (state.specDir) {
+				state.specFiles.set("friends.mdx", await readFile(state.specDir, "friends.mdx").catch(() => ""));
 			}
 			await loadBackupSessions();
 			setStatus(`已读取 ${state.files.size} 个配置文件、${state.posts.length} 篇文章、${state.backupSessions.length} 个备份会话。`, "ok");
@@ -1216,6 +1368,7 @@
 
 		function dirtyMarkForGroup(id) {
 			if (id === "posts" && state.dirtyPosts.size) return ` (${state.dirtyPosts.size})`;
+			if (id === "content" && (state.dirtySpec.size || state.dirtyNestedFiles.size)) return ` (${state.dirtySpec.size + state.dirtyNestedFiles.size})`;
 			if (id === "source" && state.dirtyFiles.size) return ` (${state.dirtyFiles.size})`;
 			const group = fieldGroups[id];
 			if (!group) return "";
@@ -1235,7 +1388,7 @@
 		}
 
 		function renderDashboard() {
-			const dirty = state.dirtyFiles.size + state.dirtyPosts.size;
+			const dirty = state.dirtyFiles.size + state.dirtyNestedFiles.size + state.dirtyPosts.size + state.dirtySpec.size;
 			els.content.innerHTML = `
 				<div class="panel">
 					<div class="panel-header">
@@ -1322,6 +1475,12 @@
 			if (field.type === "assetGallery") {
 				return `<div class="field" style="grid-column:1/-1"><label>${esc(field.label)}</label><div id="${id}-preview">${assetGalleryHtml(value)}</div>${hintHtml(hint)}</div>`;
 			}
+			if (field.type === "friendsMdx") {
+				return `<div class="field" style="grid-column:1/-1"><label>${esc(field.label)}</label>${renderFriendsMdxEditor(field, id, disabled)}${hintHtml(hint)}</div>`;
+			}
+			if (field.type === "galleryImages") {
+				return `<div class="field" style="grid-column:1/-1"><label>${esc(field.label)}</label>${renderGalleryImages(field, id, value, disabled)}${hintHtml(hint)}</div>`;
+			}
 			if (field.type === "textarea" || field.type === "lines" || field.type === "json" || field.type === "html") {
 				let shown = value ?? "";
 				let cls = "";
@@ -1379,6 +1538,347 @@
 				const src = resolveDisplayUrl(String(item), key);
 				return `<div class="asset-card">${src ? `<img data-asset-key="${esc(key)}" src="${esc(src)}" alt="">` : `<div class="empty" data-asset-key="${esc(key)}">读取中</div>`}<div class="hint">${esc(item)}</div></div>`;
 			}).join("")}</div>`;
+		}
+
+		function renderGalleryImages(field, id, value, disabled) {
+			const albums = Array.isArray(value) ? value : [];
+			if (!albums.length) return `<div class="empty">还没有配置相册。先在“画廊相册”里添加相册 ID，再管理对应图片。</div>`;
+			return `<div id="${id}" class="gallery-manager">${albums.map((album, index) => galleryAlbumHtml(album, index, disabled)).join("")}</div>`;
+		}
+
+		function galleryAlbumHtml(album, index, disabled) {
+			const albumId = cleanAlbumId(album?.id || "");
+			const cache = state.galleryFiles.get(albumId);
+			const remote = state.galleryRemoteUrls.get(albumId);
+			const title = album?.name || albumId || `相册 #${index + 1}`;
+			const folder = albumId ? `public/gallery/${albumId}` : "public/gallery/{相册 ID}";
+			const filesHtml = !albumId
+				? `<div class="empty">这个相册还没有 ID，无法定位图片文件夹。</div>`
+				: !cache
+					? `<div class="empty" data-gallery-loading="${esc(albumId)}">正在读取 ${esc(folder)} ...</div>`
+					: cache.error
+						? `<div class="empty">${esc(cache.error)}</div>`
+						: cache.files.length
+							? `<div class="gallery-grid">${cache.files.map((file) => galleryPhotoHtml(albumId, file, album?.cover)).join("")}</div>`
+							: `<div class="empty">文件夹里还没有图片。支持 jpg、png、webp、avif、gif。</div>`;
+			if (albumId && !cache) queueGalleryScan(albumId);
+			if (albumId && !remote) queueGalleryRemoteLoad(albumId);
+			return `
+				<div class="gallery-album" data-album-id="${esc(albumId)}">
+					<div class="gallery-album-head">
+						<div>
+							<div class="item-title">${esc(title)}</div>
+							<div class="hint">${esc(folder)}${album?.cover ? ` / 封面：${esc(album.cover)}` : ""}</div>
+						</div>
+						<div class="gallery-actions">
+							<label class="button-like">
+								<input type="file" data-gallery-upload="${esc(albumId)}" accept="image/*" multiple hidden ${disabled}>
+								<span>上传图片</span>
+							</label>
+							<button type="button" data-gallery-refresh="${esc(albumId)}" ${disabled}>刷新</button>
+							<button type="button" data-gallery-cover="${esc(albumId)}" ${disabled}>设为封面</button>
+							<button type="button" class="danger" data-gallery-delete="${esc(albumId)}" ${disabled}>删除选中</button>
+						</div>
+					</div>
+					${filesHtml}
+					${albumId ? galleryRemoteHtml(albumId, remote, disabled) : ""}
+				</div>
+			`;
+		}
+
+		function galleryRemoteHtml(albumId, remote, disabled) {
+			const text = remote?.text ?? "";
+			const urls = remote?.urls || parseRemoteGalleryUrls(text);
+			return `
+				<div class="gallery-remote">
+					<div class="field" style="margin:0">
+						<label>外链图片 urls.txt</label>
+						<textarea data-gallery-urls="${esc(albumId)}" ${disabled}>${esc(text)}</textarea>
+						<div class="hint">每行一个图片 URL，# 开头为注释。保存后网站会把这些外链图片追加到相册中。</div>
+						<div data-gallery-url-preview="${esc(albumId)}">${assetGalleryHtml(urls)}</div>
+					</div>
+				</div>
+			`;
+		}
+
+		function galleryPhotoHtml(albumId, file, cover) {
+			const src = galleryPhotoUrl(albumId, file.name, file.file);
+			const publicPath = `/gallery/${albumId}/${file.name}`;
+			const isCover = cover === publicPath || cover === publicPath.slice(1) || /^cover\./i.test(file.name);
+			return `
+				<div class="gallery-photo">
+					<img src="${esc(src)}" alt="">
+					<label><input type="checkbox" data-gallery-file="${esc(file.name)}"><span>${esc(file.name)}${isCover ? " · 封面" : ""}</span></label>
+				</div>
+			`;
+		}
+
+		function galleryPhotoUrl(albumId, name, file) {
+			const key = `gallery-file:${albumId}/${name}`;
+			if (state.assetUrls.has(key)) return state.assetUrls.get(key);
+			const url = URL.createObjectURL(file);
+			state.assetUrls.set(key, url);
+			return url;
+		}
+
+		function queueGalleryScan(albumId) {
+			if (!albumId || state.galleryFiles.get(albumId)?.loading) return;
+			state.galleryFiles.set(albumId, { loading: true, files: [] });
+			scanGalleryAlbum(albumId).then(() => {
+				if (state.activeGroup === "content") renderCurrentGalleryManagers();
+			});
+		}
+
+		function queueGalleryRemoteLoad(albumId) {
+			if (!albumId || state.galleryRemoteUrls.get(albumId)?.loading) return;
+			state.galleryRemoteUrls.set(albumId, { loading: true, text: "", urls: [] });
+			loadGalleryRemoteUrls(albumId).then(() => {
+				if (state.activeGroup === "content") renderCurrentGalleryManagers();
+			});
+		}
+
+		async function loadGalleryRemoteUrls(albumId) {
+			try {
+				const text = await readNestedFile(state.root, ["public", "gallery", albumId, "urls.txt"]).catch(() => "");
+				state.galleryRemoteUrls.set(albumId, { text, urls: parseRemoteGalleryUrls(text) });
+			} catch {
+				state.galleryRemoteUrls.set(albumId, { text: "", urls: [] });
+			}
+		}
+
+		function parseRemoteGalleryUrls(text) {
+			return String(text || "")
+				.split(/\r?\n/)
+				.map((line) => line.trim())
+				.filter((line) => line && !line.startsWith("#"));
+		}
+
+		async function saveGalleryRemoteUrls(albumId, text) {
+			if (!albumId) return;
+			const normalized = String(text || "").replace(/\r\n/g, "\n");
+			const path = `public/gallery/${albumId}/urls.txt`;
+			const previous = await readNestedFile(state.root, path.split("/")).catch(() => "");
+			if (previous === normalized) return;
+			await writeNestedFile(state.root, path.split("/"), normalized);
+			state.galleryRemoteUrls.set(albumId, { text: normalized, urls: parseRemoteGalleryUrls(normalized) });
+			const existing = state.dirtyNestedFiles.get(path);
+			state.dirtyNestedFiles.set(path, {
+				path,
+				previous: existing?.previous ?? previous,
+				existed: existing?.existed ?? previous !== "",
+				changes: ["相册外链图片 urls.txt"],
+			});
+			setStatus(`已保存 ${path}。`, "ok");
+		}
+
+		async function scanGalleryAlbum(albumId) {
+			try {
+				const dir = await getDir(state.root, ["public", "gallery", albumId], false);
+				const files = [];
+				for await (const [name, handle] of dir.entries()) {
+					if (handle.kind !== "file" || !isGalleryImage(name)) continue;
+					files.push({ name, file: await handle.getFile() });
+				}
+				files.sort((a, b) => {
+					const ac = /^cover\./i.test(a.name) ? -1 : 0;
+					const bc = /^cover\./i.test(b.name) ? -1 : 0;
+					return ac - bc || a.name.localeCompare(b.name, undefined, { numeric: true });
+				});
+				state.galleryFiles.set(albumId, { files });
+			} catch {
+				state.galleryFiles.set(albumId, { files: [], error: "未找到文件夹。上传图片时会自动创建这个目录。" });
+			}
+		}
+
+		function isGalleryImage(name) {
+			return /\.(jpe?g|png|webp|avif|gif)$/i.test(name || "");
+		}
+
+		function cleanAlbumId(value) {
+			return String(value || "").trim().replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+		}
+
+		function renderFriendsMdxEditor(field, id, disabled) {
+			const text = state.specFiles.get(field.file) || "";
+			if (!text) return `<div class="empty">未找到 src/content/spec/friends.mdx。</div>`;
+			const data = parseFriendsMdx(text);
+			const notes = Array.isArray(data.notes) ? data.notes : [];
+			return `
+				<div id="${id}" class="array-box" data-friends-mdx="1">
+					<div class="array-head"><span>本站信息和申请说明</span><span class="hint">保留原 MDX 布局，只改 site / notes 结构化字段</span></div>
+					<div class="array-items">
+						<div class="array-card">
+							<div class="array-card-head"><strong>本站友链信息</strong></div>
+							<div class="grid">
+								${friendMdxInput("name", "站点名称", data.site?.name, disabled)}
+								${friendMdxInput("desc", "站点描述", data.site?.desc, disabled)}
+								${friendMdxInput("url", "站点链接", data.site?.url, disabled)}
+								${friendMdxInput("avatar", "头像链接", data.site?.avatar, disabled, true)}
+								${friendMdxInput("email", "申请邮箱", data.site?.email, disabled)}
+							</div>
+						</div>
+						<div class="array-card">
+							<div class="array-card-head"><strong>注意事项</strong><button type="button" data-action="add-note" ${disabled}>新增</button></div>
+							<div class="array-items" data-notes>${notes.map((note, index) => friendNoteHtml(note, index, disabled)).join("") || `<div class="empty">暂无注意事项。</div>`}</div>
+						</div>
+						<div class="notice">随机封面提示：只开启 coverImageConfig.randomCoverImage.enable 不会自动给所有文章补封面。文章 Frontmatter 的 image 必须填 api，文章列表和详情页才会调用随机封面 API。</div>
+					</div>
+				</div>
+			`;
+		}
+
+		function friendMdxInput(key, label, value, disabled, preview = false) {
+			return `<div class="field"><label>${esc(label)}</label><input data-site-key="${esc(key)}" type="text" value="${esc(value ?? "")}" ${disabled}>${preview ? `<div data-site-preview="${esc(key)}">${imagePreview(value)}</div>` : ""}</div>`;
+		}
+
+		function friendNoteHtml(note, index, disabled) {
+			return `
+				<div class="array-card" data-note-index="${index}">
+					<div class="array-card-head"><strong>#${index + 1}</strong><button type="button" class="danger" data-action="remove-note" ${disabled}>删除</button></div>
+					<div class="grid">
+						<div class="field"><label>标题</label><input data-note-key="title" type="text" value="${esc(note?.title ?? "")}" ${disabled}></div>
+						<div class="field"><label>内容</label><input data-note-key="content" type="text" value="${esc(note?.content ?? "")}" ${disabled}></div>
+					</div>
+				</div>
+			`;
+		}
+
+		function bindFriendsMdxEditor(id) {
+			const root = document.getElementById(id);
+			if (!root) return;
+			const apply = debounce(() => applyFriendsMdxFromEditor(root), 250);
+			root.addEventListener("input", (event) => {
+				if (event.target?.dataset?.siteKey === "avatar") {
+					const preview = root.querySelector('[data-site-preview="avatar"]');
+					if (preview) preview.innerHTML = imagePreview(event.target.value);
+				}
+				apply();
+			});
+			root.addEventListener("change", () => applyFriendsMdxFromEditor(root));
+			root.addEventListener("click", (event) => {
+				const action = event.target?.dataset?.action;
+				if (!action) return;
+				if (action === "add-note") {
+					const notesBox = root.querySelector("[data-notes]");
+					const index = notesBox.querySelectorAll("[data-note-index]").length;
+					if (index === 0) notesBox.innerHTML = "";
+					notesBox.insertAdjacentHTML("beforeend", friendNoteHtml({ title: "新事项", content: "" }, index, ""));
+				}
+				if (action === "remove-note") event.target.closest("[data-note-index]")?.remove();
+				renumberFriendNotes(root);
+				applyFriendsMdxFromEditor(root);
+			});
+		}
+
+		function renumberFriendNotes(root) {
+			root.querySelectorAll("[data-note-index]").forEach((card, index) => {
+				card.dataset.noteIndex = String(index);
+				const title = card.querySelector(".array-card-head strong");
+				if (title) title.textContent = `#${index + 1}`;
+			});
+		}
+
+		function applyFriendsMdxFromEditor(root) {
+			const text = state.specFiles.get("friends.mdx") || "";
+			if (!text) return;
+			const current = parseFriendsMdx(text);
+			const site = { ...(current.site || {}) };
+			root.querySelectorAll("[data-site-key]").forEach((input) => {
+				site[input.dataset.siteKey] = input.value;
+			});
+			const notes = [...root.querySelectorAll("[data-note-index]")].map((card) => {
+				const note = {};
+				card.querySelectorAll("[data-note-key]").forEach((input) => note[input.dataset.noteKey] = input.value);
+				return note;
+			});
+			const next = writeFriendsMdx(text, { site, notes });
+			state.specFiles.set("friends.mdx", next);
+			state.dirtySpec.add("friends.mdx");
+			recordChange("src/content/spec/friends.mdx", "友链申请示例");
+			renderNav();
+			setStatus(`friends.mdx 已更新，尚未保存。`, "warn");
+		}
+
+		function clearGalleryCache(albumId = "") {
+			const prefix = albumId ? `gallery-file:${albumId}/` : "gallery-file:";
+			for (const [key, url] of state.assetUrls.entries()) {
+				if (key.startsWith(prefix)) {
+					URL.revokeObjectURL(url);
+					state.assetUrls.delete(key);
+				}
+			}
+			if (albumId) state.galleryFiles.delete(albumId);
+			else {
+				state.galleryFiles.clear();
+				state.galleryRemoteUrls.clear();
+			}
+		}
+
+		function renderCurrentGalleryManagers() {
+			const group = fieldGroups[state.activeGroup];
+			if (!group) return;
+			group.fields.forEach((field, index) => {
+				if (field.type !== "galleryImages") return;
+				const id = `${state.activeGroup}-${index}`;
+				const root = document.getElementById(id);
+				if (!root) return;
+				const read = readFieldValue(field);
+				root.outerHTML = renderGalleryImages(field, id, read.value, read.ok ? "" : "disabled");
+				bindGalleryImages(field, id);
+			});
+		}
+
+		function selectedGalleryFiles(albumNode) {
+			return [...albumNode.querySelectorAll("[data-gallery-file]:checked")].map((input) => input.dataset.galleryFile);
+		}
+
+		async function uploadGalleryImages(albumId, files) {
+			if (!albumId || !files.length) return;
+			const dir = await getDir(state.root, ["public", "gallery", albumId], true);
+			await Promise.all(files.filter((file) => isGalleryImage(file.name)).map((file) => writeBinaryFile(dir, file.name, file)));
+			clearGalleryCache(albumId);
+			await scanGalleryAlbum(albumId);
+			renderCurrentGalleryManagers();
+			setStatus(`已上传 ${files.length} 张图片到 public/gallery/${albumId}。`, "ok");
+		}
+
+		async function deleteGalleryImages(albumId, names) {
+			if (!albumId || !names.length) {
+				setStatus("请先选择要删除的图片。", "warn");
+				return;
+			}
+			if (!confirm(`确定删除 ${names.length} 张画廊图片吗？这个操作会直接删除 public/gallery/${albumId}/ 中的文件。`)) return;
+			const dir = await getDir(state.root, ["public", "gallery", albumId], false);
+			await Promise.all(names.map((name) => removeFile(dir, name).catch(() => {})));
+			clearGalleryCache(albumId);
+			await scanGalleryAlbum(albumId);
+			renderCurrentGalleryManagers();
+			setStatus(`已删除 ${names.length} 张画廊图片。`, "ok");
+		}
+
+		function setGalleryCover(field, albumId, name) {
+			const read = readFieldValue(field);
+			const albums = Array.isArray(read.value) ? structuredClone(read.value) : [];
+			const album = albums.find((item) => cleanAlbumId(item.id) === albumId);
+			if (!album) return;
+			const coverPath = `/gallery/${albumId}/${name}`;
+			album.cover = coverPath;
+			applyField(field, albums);
+			updateAlbumCoverEditor(albumId, coverPath);
+			renderCurrentGalleryManagers();
+			setStatus(`已设置 ${album.name || albumId} 的封面，点击保存后写入 galleryConfig.ts。`, "warn");
+		}
+
+		function updateAlbumCoverEditor(albumId, coverPath) {
+			els.content.querySelectorAll(".array-card").forEach((card) => {
+				const idInput = card.querySelector('[data-key="id"]');
+				const coverInput = card.querySelector('[data-key="cover"]');
+				if (!idInput || !coverInput || cleanAlbumId(idInput.value) !== albumId) return;
+				coverInput.value = coverPath;
+				coverInput.dispatchEvent(new Event("change", { bubbles: true }));
+				const preview = coverInput.closest(".field")?.querySelector('[data-preview-key="cover"]');
+				if (preview) preview.innerHTML = imagePreview(coverPath);
+			});
 		}
 
 		function updatePreviewForField(field, id, value) {
@@ -1484,7 +1984,13 @@
 		}
 
 		function assetCandidates(value) {
-			const v = value.replace(/\\/g, "/").replace(/^file:\/\/\/?/i, "");
+			const repoName = state.root?.name || "";
+			let v = value.replace(/\\/g, "/").replace(/^file:\/\/\/?/i, "");
+			if (/^[A-Za-z]:\//.test(v)) {
+				const marker = repoName ? `/${repoName}/` : "";
+				const idx = marker ? v.toLowerCase().lastIndexOf(marker.toLowerCase()) : -1;
+				if (idx !== -1) v = v.slice(idx + marker.length);
+			}
 			const stripped = v.replace(/^\.\//, "").replace(/^\/+/, "");
 			const candidates = [];
 			if (!stripped) return candidates;
@@ -1530,6 +2036,7 @@
 				["configId", "配置 ID", "text"],
 				["responsive.hidden", "隐藏设备", "lines"],
 				["responsive.collapseThreshold", "折叠阈值", "number"],
+				["responsive.showHeatmap", "显示热力图", "boolean"],
 				["customProps", "自定义属性", "json"],
 			];
 		}
@@ -1582,6 +2089,14 @@
 				bindArrayEditor(field, id);
 				return;
 			}
+			if (field.type === "friendsMdx") {
+				bindFriendsMdxEditor(id);
+				return;
+			}
+			if (field.type === "galleryImages") {
+				bindGalleryImages(field, id);
+				return;
+			}
 			const event = field.type === "boolean" ? "change" : "input";
 			el.addEventListener(event, debounce(() => {
 				const value = fieldInputValue(field, el);
@@ -1618,6 +2133,72 @@
 			root.addEventListener("change", () => {
 				current = collectArray(root, field.type === "componentList" ? componentSchema() : field.schema);
 				applyField(field, current);
+			});
+		}
+
+		function bindGalleryImages(field, id) {
+			const root = document.getElementById(id);
+			if (!root) return;
+			root.querySelectorAll("[data-gallery-upload]").forEach((input) => {
+				input.addEventListener("change", async () => {
+					try {
+						const files = [...input.files];
+						await uploadGalleryImages(input.dataset.galleryUpload, files);
+						input.value = "";
+					} catch (error) {
+						console.error(error);
+						setStatus(`上传画廊图片失败：${error.message}`, "error");
+					}
+				});
+			});
+			root.querySelectorAll("[data-gallery-refresh]").forEach((button) => {
+				button.addEventListener("click", async () => {
+					const albumId = button.dataset.galleryRefresh;
+					clearGalleryCache(albumId);
+					await scanGalleryAlbum(albumId);
+					renderCurrentGalleryManagers();
+					setStatus(`已刷新 public/gallery/${albumId}。`, "ok");
+				});
+			});
+			root.querySelectorAll("[data-gallery-delete]").forEach((button) => {
+				button.addEventListener("click", async () => {
+					try {
+						const album = button.closest(".gallery-album");
+						await deleteGalleryImages(button.dataset.galleryDelete, selectedGalleryFiles(album));
+					} catch (error) {
+						console.error(error);
+						setStatus(`删除画廊图片失败：${error.message}`, "error");
+					}
+				});
+			});
+			root.querySelectorAll("[data-gallery-cover]").forEach((button) => {
+				button.addEventListener("click", () => {
+					const album = button.closest(".gallery-album");
+					const selected = selectedGalleryFiles(album);
+					if (selected.length !== 1) {
+						setStatus("请选择一张图片作为封面。", "warn");
+						return;
+					}
+					setGalleryCover(field, button.dataset.galleryCover, selected[0]);
+				});
+			});
+			root.querySelectorAll("[data-gallery-urls]").forEach((textarea) => {
+				const albumId = textarea.dataset.galleryUrls;
+				const apply = debounce(async () => {
+					try {
+						await saveGalleryRemoteUrls(albumId, textarea.value);
+					} catch (error) {
+						console.error(error);
+						setStatus(`保存相册外链图片失败：${error.message}`, "error");
+					}
+				}, 500);
+				textarea.addEventListener("input", () => {
+					state.galleryRemoteUrls.set(albumId, { text: textarea.value, urls: parseRemoteGalleryUrls(textarea.value) });
+					const preview = root.querySelector(`[data-gallery-url-preview="${cssEscape(albumId)}"]`);
+					if (preview) preview.innerHTML = assetGalleryHtml(parseRemoteGalleryUrls(textarea.value));
+					apply();
+				});
+				textarea.addEventListener("change", apply);
 			});
 		}
 
@@ -1672,7 +2253,7 @@
 				state.dirtyFiles.add(field.file);
 				recordChange(field.file, fieldChangeLabel(field));
 				renderNav();
-				setStatus(quiet ? `有 ${state.dirtyFiles.size + state.dirtyPosts.size} 项待保存。` : `${field.label} 已更新，尚未保存。`, "warn");
+				setStatus(quiet ? `有 ${state.dirtyFiles.size + state.dirtyNestedFiles.size + state.dirtyPosts.size + state.dirtySpec.size} 项待保存。` : `${field.label} 已更新，尚未保存。`, "warn");
 			} catch (error) {
 				console.error(error);
 				setStatus(error.message, "error");
@@ -1708,6 +2289,10 @@
 		}
 
 		function readFieldValue(field) {
+			if (field.type === "friendsMdx") {
+				const specText = state.specFiles.get(field.file);
+				return specText ? { ok: true, value: parseFriendsMdx(specText) } : { ok: false, value: "" };
+			}
 			const text = state.files.get(field.file);
 			if (text === undefined || text === "") return { ok: false, value: "" };
 			if (field.type === "html") return { ok: true, value: text };
@@ -1750,6 +2335,24 @@
 				throw new Error(`未找到 ${field.file} 中的 ${field.objectName}${field.path ? "." + field.path : ""}`);
 			}
 			return text.slice(0, range.start) + toTs(value, range.valueText) + text.slice(range.end);
+		}
+
+		function parseFriendsMdx(text) {
+			const siteRange = findExport(text, "site");
+			const notesRange = findExport(text, "notes");
+			return {
+				site: siteRange ? parseTs(siteRange.valueText) : {},
+				notes: notesRange ? parseTs(notesRange.valueText) : [],
+			};
+		}
+
+		function writeFriendsMdx(text, data) {
+			let next = text;
+			const siteRange = findExport(next, "site");
+			if (siteRange) next = next.slice(0, siteRange.start) + toTs(data.site || {}, siteRange.valueText) + next.slice(siteRange.end);
+			const notesRange = findExport(next, "notes");
+			if (notesRange) next = next.slice(0, notesRange.start) + toTs(data.notes || [], notesRange.valueText) + next.slice(notesRange.end);
+			return next;
 		}
 
 		function readNavBarDynamicPart(text, type) {
@@ -1857,7 +2460,10 @@
 							<h2 class="panel-title">文章管理</h2>
 							<div class="subtle">读取 src/content/posts 下的 Markdown/MDX，支持 Frontmatter 和正文编辑。</div>
 						</div>
-						<button type="button" id="newPostBtn" class="primary">新建文章</button>
+						<div class="row-actions" style="margin-top:0">
+							<button type="button" id="setMissingApiCoverBtn">无封面文章使用随机封面</button>
+							<button type="button" id="newPostBtn" class="primary">新建文章</button>
+						</div>
 					</div>
 					<div class="panel-body">
 						${state.postsDir ? postManagerHtml(filtered, active) : `<div class="notice">未找到 src/content/posts，无法管理文章。</div>`}
@@ -1866,6 +2472,7 @@
 			`;
 			if (!state.postsDir) return;
 			document.getElementById("newPostBtn").addEventListener("click", newPost);
+			document.getElementById("setMissingApiCoverBtn").addEventListener("click", setMissingPostsApiCover);
 			document.getElementById("postSearch").addEventListener("input", debounce((e) => {
 				state.postQuery = e.target.value;
 				renderPosts();
@@ -1921,6 +2528,7 @@
 						<a href="${esc(postFileUrl(post.path))}" target="_blank" rel="noreferrer"><button type="button">打开源文件</button></a>
 					</div>
 					<div class="panel-body">
+						<div class="notice">随机封面显示条件：这里的“封面图”必须填 api，并且 coverImageConfig.randomCoverImage.enable 已开启、API 列表不为空，文章卡片才会显示随机封面。只开启随机封面总开关不会自动给无封面文章补图。</div>
 						<div class="grid">
 							${postInput("title", "标题", fm.title)}
 							${postInput("slug", "自定义 slug", fm.slug)}
@@ -1929,6 +2537,7 @@
 							${postInput("category", "分类", fm.category)}
 							${postInput("author", "作者", fm.author)}
 							${postInput("image", "封面图", fm.image)}
+							<div class="field"><label>随机封面</label><button type="button" id="setCurrentApiCover">当前文章使用 image: api</button><div class="hint">保存后网站会按文章路径生成稳定随机图。</div></div>
 							${postInput("lang", "语言", fm.lang || fm.language)}
 							${postInput("licenseName", "许可证名称", fm.licenseName)}
 							${postInput("licenseUrl", "许可证链接", fm.licenseUrl)}
@@ -1983,7 +2592,38 @@
 				const preview = el.closest(".field")?.querySelector(`[data-post-preview="${cssEscape(key)}"]`);
 				if (preview) preview.innerHTML = imagePreview(el.value);
 			}));
+			const apiCoverBtn = document.getElementById("setCurrentApiCover");
+			if (apiCoverBtn) apiCoverBtn.addEventListener("click", () => {
+				const imageInput = document.getElementById("pf-image");
+				if (!imageInput) return;
+				imageInput.value = "api";
+				imageInput.dispatchEvent(new Event("input", { bubbles: true }));
+				post.frontmatter.image = "api";
+				post.text = stringifyPost(post);
+				state.dirtyPosts.add(post.path);
+				recordChange(`src/content/posts/${post.path}`, "随机封面 image: api");
+				renderNav();
+				setStatus(`文章 ${post.path} 已设置 image: api，点击保存后生效。`, "warn");
+			});
 			els.content.querySelectorAll("input[type=checkbox]").forEach((el) => el.addEventListener("change", update));
+		}
+
+		function setMissingPostsApiCover() {
+			const targets = state.posts.filter((post) => !post.frontmatter.image);
+			if (!targets.length) {
+				setStatus("所有文章都已经有 image 字段。", "ok");
+				return;
+			}
+			if (!confirm(`确定给 ${targets.length} 篇没有封面的文章设置 image: api 吗？`)) return;
+			targets.forEach((post) => {
+				post.frontmatter.image = "api";
+				post.text = stringifyPost(post);
+				state.dirtyPosts.add(post.path);
+				recordChange(`src/content/posts/${post.path}`, "随机封面 image: api");
+			});
+			renderNav();
+			renderPosts();
+			setStatus(`已给 ${targets.length} 篇文章设置 image: api，点击保存后生效。`, "warn");
 		}
 
 		function normalizeParts(parts) {
@@ -2174,11 +2814,13 @@
 			const session = state.backupSessions.find((item) => item.id === id);
 			if (!session) return;
 			if (!confirm(`确定恢复备份 ${id}？当前文件会先创建一个恢复前备份。`)) return;
-			await createBackup("restore-before");
+			await createRestorePoint(session);
 			for (const file of session.files) {
 				const backupText = await readNestedFile(state.backupDir, [file.backupPath]);
 				if (file.existed === false) {
 					await removeNestedFile(state.root, file.path.split("/")).catch(() => {});
+				} else if (file.path.startsWith("src/content/spec/")) {
+					await writeNestedFile(state.root, file.path.split("/"), backupText);
 				} else {
 					await writeNestedFile(state.root, file.path.split("/"), backupText);
 				}
@@ -2187,6 +2829,33 @@
 			renderNav();
 			render();
 			setStatus(`已恢复备份 ${id}。`, "ok");
+		}
+
+		async function createRestorePoint(session) {
+			const backupName = `恢复前-${session.name || session.id}`;
+			const id = `${stamp()}-restore-before-${safeBackupSlug(session.name || session.id)}`;
+			const files = await Promise.all((session.files || []).map(async (file) => {
+				const parts = file.path.split("/");
+				let existed = true;
+				const current = await readNestedFile(state.root, parts).catch(() => {
+					existed = false;
+					return "";
+				});
+				const backupPath = `${id}__${file.path.replace(/[\\/]/g, "__")}.bak`;
+				await writeFile(state.backupDir, backupPath, current);
+				return { path: file.path, backupPath, existed, changes: [`恢复 ${session.name || session.id} 前的当前版本`] };
+			}));
+			if (!files.length) return;
+			const manifest = {
+				id,
+				name: backupName,
+				createdAt: new Date().toISOString(),
+				reason: "restore-before",
+				summary: `恢复 ${session.name || session.id} 前自动创建，包含 ${files.length} 个即将被覆盖的文件。`,
+				files,
+			};
+			await writeFile(state.backupDir, `${id}.json`, JSON.stringify(manifest, null, 2));
+			state.backupSessions.unshift(manifest);
 		}
 
 		async function renameBackup(id) {
@@ -2261,28 +2930,35 @@
 		}
 
 		async function saveAll() {
-			if (!state.dirtyFiles.size && !state.dirtyPosts.size) {
+			if (!state.dirtyFiles.size && !state.dirtyNestedFiles.size && !state.dirtyPosts.size && !state.dirtySpec.size) {
 				setStatus("没有需要保存的修改。", "ok");
 				return;
 			}
 			try {
 				els.saveBtn.disabled = true;
 				state.nextBackupName = els.backupName?.value?.trim() || "";
+				const savedFiles = new Set(state.dirtyFiles);
+				const savedNested = new Set(state.dirtyNestedFiles.keys());
+				const savedPosts = new Set(state.dirtyPosts);
+				const savedSpec = new Set(state.dirtySpec);
 				await createBackup("save-before");
 				await Promise.all([...state.dirtyFiles].map((file) => writeFile(state.configDir, file, state.files.get(file))));
 				await Promise.all([...state.dirtyPosts].map(async (path) => {
 					const post = state.posts.find((p) => p.path === path);
 					if (post) await writeNestedFile(state.postsDir, path.split("/"), stringifyPost(post));
 				}));
-				const saved = state.dirtyFiles.size + state.dirtyPosts.size;
+				await Promise.all([...state.dirtySpec].map((file) => writeFile(state.specDir, file, state.specFiles.get(file))));
+				const saved = state.dirtyFiles.size + state.dirtyNestedFiles.size + state.dirtyPosts.size + state.dirtySpec.size;
 				state.dirtyFiles.clear();
+				state.dirtyNestedFiles.clear();
 				state.dirtyPosts.clear();
+				state.dirtySpec.clear();
 				state.changeNotes.clear();
 				state.nextBackupName = "";
 				if (els.backupName) els.backupName.value = "";
 				applyThemeHueFromConfig();
 				renderNav();
-				render();
+				refreshAfterSave(savedFiles, savedNested, savedPosts, savedSpec);
 				setStatus(`已保存 ${saved} 项修改，并创建备份。`, "ok");
 			} catch (error) {
 				console.error(error);
@@ -2290,6 +2966,42 @@
 			} finally {
 				els.saveBtn.disabled = false;
 			}
+		}
+
+		function refreshAfterSave(savedFiles, savedNested, savedPosts, savedSpec) {
+			if (state.activeGroup === "dashboard") {
+				renderDashboard();
+				return;
+			}
+			if (state.activeGroup === "backups") {
+				renderBackups();
+				return;
+			}
+			if (state.activeGroup === "source") {
+				renderSourceTabsOnly();
+				return;
+			}
+			if (state.activeGroup === "posts" && savedPosts.size) updatePostDirtyBadges();
+		}
+
+		function renderSourceTabsOnly() {
+			const files = [...state.files.keys()].filter((file) => state.files.get(file) !== "");
+			const tabs = els.content.querySelector(".tabs");
+			if (!tabs) return;
+			tabs.innerHTML = files.map((file) => `<button type="button" data-file="${esc(file)}" class="${file === state.activeSourceFile ? "active" : ""}">${esc(file)}${state.dirtyFiles.has(file) ? " *" : ""}</button>`).join("");
+			tabs.querySelectorAll("button").forEach((btn) => btn.addEventListener("click", () => {
+				state.activeSourceFile = btn.dataset.file;
+				renderSource();
+			}));
+		}
+
+		function updatePostDirtyBadges() {
+			els.content.querySelectorAll(".list-item").forEach((item) => {
+				const badges = item.querySelector(".badges");
+				if (!badges) return;
+				const marker = badges.querySelector("[data-dirty-post]");
+				if (!state.dirtyPosts.has(item.dataset.path) && marker) marker.remove();
+			});
 		}
 
 		async function createBackup(reason) {
@@ -2318,7 +3030,23 @@
 				await writeFile(state.backupDir, backupPath, current);
 				return { path: fullPath, backupPath, existed, changes: getChangeNotes(fullPath) };
 			});
-			const files = await Promise.all([...configBackups, ...postBackups]);
+			const specBackups = [...state.dirtySpec].map(async (file) => {
+				let existed = true;
+				const current = await readFile(state.specDir, file).catch(() => {
+					existed = false;
+					return "";
+				});
+				const fullPath = `src/content/spec/${file}`;
+				const backupPath = `${id}__${fullPath.replace(/[\\/]/g, "__")}.bak`;
+				await writeFile(state.backupDir, backupPath, current);
+				return { path: fullPath, backupPath, existed, changes: getChangeNotes(fullPath) };
+			});
+			const nestedBackups = [...state.dirtyNestedFiles.values()].map(async (item) => {
+				const backupPath = `${id}__${item.path.replace(/[\\/]/g, "__")}.bak`;
+				await writeFile(state.backupDir, backupPath, item.previous || "");
+				return { path: item.path, backupPath, existed: item.existed !== false, changes: item.changes || [] };
+			});
+			const files = await Promise.all([...configBackups, ...postBackups, ...specBackups, ...nestedBackups]);
 			if (files.length) {
 				const manifest = { id, name: backupName, createdAt: new Date().toISOString(), reason, summary: backupSummary(files), files };
 				await writeFile(state.backupDir, `${id}.json`, JSON.stringify(manifest, null, 2));
