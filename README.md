@@ -1,7 +1,7 @@
 # Firefly 本地管理器
 
 `firefly-config-manager.html` 是一个用于管理 Firefly / Fuwari / Astro 博客的本地图形化工具。它通过浏览器的本地目录读写能力修改仓库里的配置文件和文章文件，不会上传任何内容。
-
+注意!!!由于本人的博客已在Firefly的基础上加入其他功能,博客管理器和原版有出入因此不再更新该管理器.后续管理器可能和新版Firefly的新功能有兼容性问题,只保证原版功能表单填写正常.
 ## 打开方式
 
 1. 使用最新版 Chrome 或 Edge 打开 `firefly-config-manager.html`。
